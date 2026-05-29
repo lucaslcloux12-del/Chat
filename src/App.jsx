@@ -27,9 +27,9 @@ const INITIAL_ROLES = {
 };
 const GROUP_NAMES = ["Chat Geral","Chat 1","Resenha 1","Chat 3"];
 
-function rankPower(r) { return {dono:5,leadAdmin:4,admin:3,membro:2,normal:1}[r]||1; }
-function rankLabel(r) { return {dono:"👑 Dono",leadAdmin:"⭐ Lead Admin",admin:"🛡 Admin",membro:"🔑 Membro",normal:"👤 Normal"}[r]||"👤 Normal"; }
-function rankColor(r) { return {dono:"#fddb92",leadAdmin:"#ff6b6b",admin:"#c471ed",membro:"#12c2e9",normal:"#555"}[r]||"#555"; }
+function rankPower(r) { return {dono:6,subDono:5,leadAdmin:4,admin:3,membro:2,normal:1}[r]||1; }
+function rankLabel(r) { return {dono:"👑 Dono",subDono:"💎 Sub-Dono",leadAdmin:"⭐ Lead Admin",admin:"🛡 Admin",membro:"🔑 Membro",normal:"👤 Normal"}[r]||"👤 Normal"; }
+function rankColor(r) { return {dono:"#fddb92",subDono:"#e0aaff",leadAdmin:"#ff6b6b",admin:"#c471ed",membro:"#12c2e9",normal:"#555"}[r]||"#555"; }
 function canAccess(u,g,members,roles) {
   const r=roles[u];
   if(r==="dono"||r==="leadAdmin"||r==="admin") return true;
@@ -211,7 +211,11 @@ export default function App() {
   );
 
   const role=roles[user]||"normal";
-  const myManagedGroup = GROUP_NAMES.find(g => (groupMeta[g]?.groupMembers||[]).includes(user)) || null;
+  const myManagedGroup = GROUP_NAMES.find(g => {
+    const raw = groupMeta[g]?.groupMembers;
+    const arr = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : [];
+    return arr.includes(user);
+  }) || null;
   const power=rankPower(role);
   const myColor=USERS_DEF[user].color;
 
@@ -438,26 +442,31 @@ export default function App() {
 // ─── ADMIN PANEL ─────────────────────────────────────────────
 function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,groupMeta,myManagedGroup,ALL_USERS,rankLabel,rankColor,rankPower,adminTab,setAdminTab,onBack}) {
   function setGroupMember(group, target) {
-    const cur = groupMeta[group]?.groupMembers || [];
+    // Firebase stores arrays as objects, convert to real array
+    const raw = groupMeta[group]?.groupMembers;
+    const cur = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : [];
     const already = cur.includes(target);
     const updated = already ? cur.filter(u => u !== target) : [...cur, target];
     set(ref(db, `groupMeta/${group}/groupMembers`), updated.length > 0 ? updated : null);
-    // Add to group members automatically
+    // Add to group members automatically when adding
     if (!already) {
-      const grpCur = members[group] || [];
+      const grpRaw = members[group];
+      const grpCur = grpRaw ? (Array.isArray(grpRaw) ? grpRaw : Object.values(grpRaw)) : [];
       if (!grpCur.includes(target)) set(ref(db, `members/${group}`), [...grpCur, target]);
     }
   }
   function setRole(target,newRole) {
+    if(target==="Lucas") return; // Lucas cannot be changed
+    if(roles[target]==="dono") return; // cannot demote dono
     const nr={...roles};
     if(newRole==="leadAdmin") Object.keys(nr).forEach(u=>{if(nr[u]==="leadAdmin")nr[u]="normal";});
-    if(newRole==="dono") Object.keys(nr).forEach(u=>{if(nr[u]==="dono")nr[u]="leadAdmin";});
     nr[target]=newRole;
     set(ref(db,"roles"),nr);
   }
   function toggleSuspend(target){ set(ref(db,`suspended/${target}`),!suspended[target]||null); }
   function toggleMember(group,target){
-    const cur=members[group]||[];
+    const raw=members[group];
+    const cur=raw?(Array.isArray(raw)?raw:Object.values(raw)):[];
     const updated=cur.includes(target)?cur.filter(u=>u!==target):[...cur,target];
     set(ref(db,`members/${group}`),updated.length>0?updated:null);
   }
@@ -491,7 +500,7 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,gr
               const uRole=roles[u]||"normal";
               const uPower=rankPower(uRole);
               const isSusp=!!suspended[u];
-              const canEdit=power>uPower||power===5;
+              const canEdit=(power>uPower||power===6) && u!=="Lucas" && uRole!=="dono";
               const isMe=u===user;
               return (
                 <div key={u} style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"12px 14px"}}>
@@ -511,8 +520,8 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,gr
                   </div>
                   {canEdit&&!isMe&&(
                     <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                      {["normal","membro","admin","leadAdmin","dono"].map(r=>{
-                        if(r==="dono"&&power<5)return null;
+                      {["normal","membro","admin","leadAdmin","subDono"].map(r=>{
+                        if(r==="subDono"&&power<6)return null;
                         if(r==="leadAdmin"&&power<5)return null;
                         if(r==="admin"&&power<4)return null;
                         return <button key={r} onClick={()=>setRole(u,r)} style={{padding:"4px 9px",borderRadius:6,fontSize:9,cursor:"pointer",fontFamily:"monospace",border:"none",background:uRole===r?rankColor(r):"#1a1a1a",color:uRole===r?"#0d0d0d":"#555"}}>{rankLabel(r)}</button>;
@@ -537,7 +546,9 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,gr
                       <div style={{fontSize:9,color:"#555",marginBottom:5,letterSpacing:1}}>MEMBRO RESPONSÁVEL</div>
                       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
                         {ALL_USERS.map(u=>{
-                          const isResp=(groupMeta[g]?.groupMembers||[]).includes(u);
+                          const _gm=groupMeta[g]?.groupMembers;
+                          const _gmArr=_gm?(Array.isArray(_gm)?_gm:Object.values(_gm)):[];
+                          const isResp=_gmArr.includes(u);
                           return <button key={u} onClick={()=>power>=3&&setGroupMember(g,isResp?null:u)} style={{padding:"4px 9px",borderRadius:8,fontSize:9,cursor:power>=3?"pointer":"default",fontFamily:"monospace",border:`1.5px solid ${isResp?USERS_DEF[u].color:"#2a2a2a"}`,background:isResp?USERS_DEF[u].color:"#1a1a1a",color:isResp?"#0d0d0d":"#555"}}>{u[0]} {u}</button>;
                         })}
                       </div>
@@ -546,7 +557,9 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,gr
                   <div style={{fontSize:9,color:"#555",marginBottom:5,letterSpacing:1}}>MEMBROS</div>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                     {ALL_USERS.map(u=>{
-                      const isMem=grpMembers.includes(u);
+                      const _mr2=members[g];
+                      const _ma2=_mr2?(Array.isArray(_mr2)?_mr2:Object.values(_mr2)):[];
+                      const isMem=_ma2.includes(u);
                       const canToggle=isExtra&&power>=3;
                       return <button key={u} onClick={()=>canToggle&&toggleMember(g,u)} style={{padding:"4px 9px",borderRadius:6,fontSize:9,cursor:canToggle?"pointer":"default",fontFamily:"monospace",border:"none",background:isMem?USERS_DEF[u].color:"#1a1a1a",color:isMem?"#0d0d0d":"#444"}}>{u}</button>;
                     })}
@@ -572,13 +585,16 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,gr
                 <div style={{fontSize:9,color:"#555",marginBottom:5,letterSpacing:1}}>MEMBROS — clique para adicionar/remover</div>
                 <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                   {ALL_USERS.filter(u=>u!==user).map(u=>{
-                    const isMem=(members[myManagedGroup]||[]).includes(u);
+                    const _mr=members[myManagedGroup];
+                    const _ma=_mr?(Array.isArray(_mr)?_mr:Object.values(_mr)):[];
+                    const isMem=_ma.includes(u);
                     return (
                       <button key={u} onClick={()=>{
-                        const cur=members[myManagedGroup]||[];
+                        const raw=members[myManagedGroup];
+                        const cur=raw?(Array.isArray(raw)?raw:Object.values(raw)):[];
                         const updated=cur.includes(u)?cur.filter(x=>x!==u):[...cur,u];
                         set(ref(db,`members/${myManagedGroup}`),updated.length>0?updated:null);
-                      }} style={{padding:"6px 10px",borderRadius:8,fontSize:10,cursor:"pointer",fontFamily:"monospace",border:"none",background:isMem?USERS_DEF[u].color:"#1a1a1a",color:isMem?"#0d0d0d":"#555"}}>
+                      }} style={{padding:"6px 10px",borderRadius:8,fontSize:10,cursor:"pointer",fontFamily:"monospace",border:"none",background:isMem?USERS_DEF[u].color:"#1a1a1a",color:isMem?"#0d0d0d":"#666"}}>
                         {u[0]} {u}
                       </button>
                     );
