@@ -211,7 +211,7 @@ export default function App() {
   );
 
   const role=roles[user]||"normal";
-  const myManagedGroup = GROUP_NAMES.find(g => groupMeta[g]?.groupMember === user) || null;
+  const myManagedGroup = GROUP_NAMES.find(g => (groupMeta[g]?.groupMembers||[]).includes(user)) || null;
   const power=rankPower(role);
   const myColor=USERS_DEF[user].color;
 
@@ -438,7 +438,15 @@ export default function App() {
 // ─── ADMIN PANEL ─────────────────────────────────────────────
 function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,groupMeta,myManagedGroup,ALL_USERS,rankLabel,rankColor,rankPower,adminTab,setAdminTab,onBack}) {
   function setGroupMember(group, target) {
-    set(ref(db, `groupMeta/${group}`), { groupMember: target || null });
+    const cur = groupMeta[group]?.groupMembers || [];
+    const already = cur.includes(target);
+    const updated = already ? cur.filter(u => u !== target) : [...cur, target];
+    set(ref(db, `groupMeta/${group}/groupMembers`), updated.length > 0 ? updated : null);
+    // Add to group members automatically
+    if (!already) {
+      const grpCur = members[group] || [];
+      if (!grpCur.includes(target)) set(ref(db, `members/${group}`), [...grpCur, target]);
+    }
   }
   function setRole(target,newRole) {
     const nr={...roles};
@@ -529,7 +537,7 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,gr
                       <div style={{fontSize:9,color:"#555",marginBottom:5,letterSpacing:1}}>MEMBRO RESPONSÁVEL</div>
                       <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
                         {ALL_USERS.map(u=>{
-                          const isResp=groupMeta[g]?.groupMember===u;
+                          const isResp=(groupMeta[g]?.groupMembers||[]).includes(u);
                           return <button key={u} onClick={()=>power>=3&&setGroupMember(g,isResp?null:u)} style={{padding:"4px 9px",borderRadius:8,fontSize:9,cursor:power>=3?"pointer":"default",fontFamily:"monospace",border:`1.5px solid ${isResp?USERS_DEF[u].color:"#2a2a2a"}`,background:isResp?USERS_DEF[u].color:"#1a1a1a",color:isResp?"#0d0d0d":"#555"}}>{u[0]} {u}</button>;
                         })}
                       </div>
