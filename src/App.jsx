@@ -180,6 +180,19 @@ export default function App() {
   const dmResults=dmSearch.trim()?ALL_USERS.filter(u=>u!==user&&u.toLowerCase().includes(dmSearch.toLowerCase())):[];
 
   // ── LOGIN ────────────────────────────────────────────────
+  // Lock page scroll
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    document.documentElement.style.height = "100%";
+    document.body.style.height = "100%";
+    document.body.style.margin = "0";
+    return () => {
+      document.body.style.overflow = "";
+      document.documentElement.style.overflow = "";
+    };
+  }, []);
+
   if(!user) return (
     <div style={{minHeight:"100vh",background:"#0a0a0a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"monospace",padding:16}}>
       <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:20,padding:"40px 32px",width:"100%",maxWidth:300,display:"flex",flexDirection:"column",gap:14,boxShadow:"0 20px 60px #000"}}>
