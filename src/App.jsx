@@ -437,6 +437,9 @@ export default function App() {
 
 // ─── ADMIN PANEL ─────────────────────────────────────────────
 function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,groupMeta,myManagedGroup,ALL_USERS,rankLabel,rankColor,rankPower,adminTab,setAdminTab,onBack}) {
+  function setGroupMember(group, target) {
+    set(ref(db, `groupMeta/${group}`), { groupMember: target || null });
+  }
   function setRole(target,newRole) {
     const nr={...roles};
     if(newRole==="leadAdmin") Object.keys(nr).forEach(u=>{if(nr[u]==="leadAdmin")nr[u]="normal";});
