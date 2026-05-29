@@ -519,13 +519,40 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,gr
                     )}
                   </div>
                   {canEdit&&!isMe&&(
-                    <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                      {["normal","membro","admin","leadAdmin","subDono"].map(r=>{
-                        if(r==="subDono"&&power<6)return null;
-                        if(r==="leadAdmin"&&power<5)return null;
-                        if(r==="admin"&&power<4)return null;
-                        return <button key={r} onClick={()=>setRole(u,r)} style={{padding:"4px 9px",borderRadius:6,fontSize:9,cursor:"pointer",fontFamily:"monospace",border:"none",background:uRole===r?rankColor(r):"#1a1a1a",color:uRole===r?"#0d0d0d":"#555"}}>{rankLabel(r)}</button>;
-                      })}
+                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                        {["normal","membro","admin","leadAdmin","subDono"].map(r=>{
+                          if(r==="subDono"&&power<6)return null;
+                          if(r==="leadAdmin"&&power<5)return null;
+                          if(r==="admin"&&power<4)return null;
+                          return <button key={r} onClick={()=>setRole(u,r)} style={{padding:"4px 9px",borderRadius:6,fontSize:9,cursor:"pointer",fontFamily:"monospace",border:"none",background:uRole===r?rankColor(r):"#1a1a1a",color:uRole===r?"#0d0d0d":"#555"}}>{rankLabel(r)}</button>;
+                        })}
+                      </div>
+                      {uRole==="membro"&&(
+                        <div style={{background:"#161616",borderRadius:8,padding:"8px 10px"}}>
+                          <div style={{fontSize:9,color:"#555",marginBottom:6,letterSpacing:1}}>GRUPO RESPONSÁVEL</div>
+                          <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                            {["Chat 1","Resenha 1","Chat 3"].map(g=>{
+                              const raw=groupMeta[g]?.groupMembers;
+                              const arr=raw?(Array.isArray(raw)?raw:Object.values(raw)):[];
+                              const isResp=arr.includes(u);
+                              return (
+                                <button key={g} onClick={()=>{
+                                  const updated=isResp?arr.filter(x=>x!==u):[...arr,u];
+                                  set(ref(db,`groupMeta/${g}/groupMembers`),updated.length>0?updated:null);
+                                  if(!isResp){
+                                    const mRaw=members[g];
+                                    const mArr=mRaw?(Array.isArray(mRaw)?mRaw:Object.values(mRaw)):[];
+                                    if(!mArr.includes(u)) set(ref(db,`members/${g}`),[...mArr,u]);
+                                  }
+                                }} style={{padding:"4px 10px",borderRadius:6,fontSize:9,cursor:"pointer",fontFamily:"monospace",border:"none",background:isResp?"#2a4a2a":"#1a1a1a",color:isResp?"#a8ff78":"#555",outline:isResp?"1px solid #a8ff78":"none"}}>
+                                  {isResp?"✓ ":""}{g}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
