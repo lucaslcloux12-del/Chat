@@ -70,6 +70,7 @@ export default function App() {
   const [groupMsgs, setGroupMsgs]   = useState({});
   const [dmMsgs, setDmMsgs]         = useState({});
   const [requests, setRequests]     = useState([]);
+  const [groupMeta, setGroupMeta]   = useState({}); // { groupName: { groupMember: "Lucas" } }
   const [active, setActive]         = useState(null);
   const [input, setInput]           = useState("");
   const [panel, setPanel]           = useState("chat");
@@ -102,6 +103,7 @@ export default function App() {
     u.push(onValue(ref(db,"groupMsgs"),s=>setGroupMsgs(s.val()||{})));
     u.push(onValue(ref(db,"dmMsgs"),s=>setDmMsgs(s.val()||{})));
     u.push(onValue(ref(db,"requests"),s=>{ const v=s.val(); setRequests(v?Object.entries(v).map(([id,r])=>({...r,id})):[]); }));
+    u.push(onValue(ref(db,"groupMeta"),s=>setGroupMeta(s.val()||{})));
     return ()=>u.forEach(fn=>fn());
   },[]);
 
@@ -209,12 +211,14 @@ export default function App() {
   );
 
   const role=roles[user]||"normal";
+  const myManagedGroup = GROUP_NAMES.find(g => groupMeta[g]?.groupMember === user) || null;
   const power=rankPower(role);
   const myColor=USERS_DEF[user].color;
 
   if(panel==="admin") return (
     <AdminPanel user={user} role={role} power={power} myColor={myColor}
       roles={roles} suspended={suspended} members={members} requests={requests}
+      groupMeta={groupMeta} myManagedGroup={myManagedGroup}
       ALL_USERS={ALL_USERS} rankLabel={rankLabel} rankColor={rankColor} rankPower={rankPower}
       adminTab={adminTab} setAdminTab={setAdminTab} onBack={()=>setPanel("chat")}/>
   );
@@ -316,7 +320,7 @@ export default function App() {
           <span style={{fontSize:9,color:rankColor(role),background:"#1a1a1a",borderRadius:6,padding:"2px 7px"}}>{rankLabel(role)}</span>
         </div>
         <div style={{display:"flex",gap:8}}>
-          {power>=3&&<button onClick={()=>setPanel("admin")} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#aaa",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"monospace"}}>⚙</button>}
+          {power>=2&&<button onClick={()=>setPanel("admin")} style={{background:"#1a1a1a",border:"1px solid #2a2a2a",color:"#aaa",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"monospace"}}>⚙</button>}
           <button onClick={()=>{setUser(null);setActive(null);}} style={{background:"transparent",border:"1px solid #222",color:"#555",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer",fontFamily:"monospace"}}>Sair</button>
         </div>
       </div>
@@ -432,7 +436,7 @@ export default function App() {
 }
 
 // ─── ADMIN PANEL ─────────────────────────────────────────────
-function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,ALL_USERS,rankLabel,rankColor,rankPower,adminTab,setAdminTab,onBack}) {
+function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,groupMeta,myManagedGroup,ALL_USERS,rankLabel,rankColor,rankPower,adminTab,setAdminTab,onBack}) {
   function setRole(target,newRole) {
     const nr={...roles};
     if(newRole==="leadAdmin") Object.keys(nr).forEach(u=>{if(nr[u]==="leadAdmin")nr[u]="normal";});
@@ -463,8 +467,10 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,AL
         <span style={{fontSize:9,color:rankColor(role),background:"#1a1a1a",borderRadius:6,padding:"2px 8px"}}>{rankLabel(role)}</span>
       </div>
       <div style={{display:"flex",borderBottom:"1px solid #1a1a1a"}}>
-        {["usuarios","grupos","pedidos"].map(t=>(
-          <button key={t} onClick={()=>setAdminTab(t)} style={{flex:1,padding:"10px 0",border:"none",fontFamily:"monospace",fontSize:11,letterSpacing:1,cursor:"pointer",background:adminTab===t?"#1a1a1a":"#0d0d0d",color:adminTab===t?myColor:"#555",borderBottom:adminTab===t?`2px solid ${myColor}`:"2px solid transparent"}}>{t.toUpperCase()}</button>
+        {(power>=3?["usuarios","grupos","pedidos"]:["meugrupo"]).map(t=>(
+          <button key={t} onClick={()=>setAdminTab(t)} style={{flex:1,padding:"10px 0",border:"none",fontFamily:"monospace",fontSize:11,letterSpacing:1,cursor:"pointer",background:adminTab===t?"#1a1a1a":"#0d0d0d",color:adminTab===t?myColor:"#555",borderBottom:adminTab===t?`2px solid ${myColor}`:"2px solid transparent"}}>
+            {t==="meugrupo"?"MEU GRUPO":t.toUpperCase()}
+          </button>
         ))}
       </div>
       <div style={{flex:1,overflowY:"auto",padding:14}}>
@@ -515,6 +521,17 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,AL
               return (
                 <div key={g} style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"12px 14px"}}>
                   <div style={{color:"#eee",fontWeight:700,fontSize:12,marginBottom:10}}>{g} <span style={{color:"#444",fontWeight:400,fontSize:10}}>({grpMembers.length} membros)</span></div>
+                  {isExtra&&(
+                    <>
+                      <div style={{fontSize:9,color:"#555",marginBottom:5,letterSpacing:1}}>MEMBRO RESPONSÁVEL</div>
+                      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10}}>
+                        {ALL_USERS.map(u=>{
+                          const isResp=groupMeta[g]?.groupMember===u;
+                          return <button key={u} onClick={()=>power>=3&&setGroupMember(g,isResp?null:u)} style={{padding:"4px 9px",borderRadius:8,fontSize:9,cursor:power>=3?"pointer":"default",fontFamily:"monospace",border:`1.5px solid ${isResp?USERS_DEF[u].color:"#2a2a2a"}`,background:isResp?USERS_DEF[u].color:"#1a1a1a",color:isResp?"#0d0d0d":"#555"}}>{u[0]} {u}</button>;
+                        })}
+                      </div>
+                    </>
+                  )}
                   <div style={{fontSize:9,color:"#555",marginBottom:5,letterSpacing:1}}>MEMBROS</div>
                   <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
                     {ALL_USERS.map(u=>{
@@ -526,6 +543,38 @@ function AdminPanel({user,role,power,myColor,roles,suspended,members,requests,AL
                 </div>
               );
             })}
+          </div>
+        )}
+        {adminTab==="meugrupo"&&(
+          <div style={{display:"flex",flexDirection:"column",gap:14}}>
+            {!myManagedGroup?(
+              <div style={{color:"#333",textAlign:"center",marginTop:40,fontSize:11}}>
+                Você não é responsável por nenhum grupo ainda.<br/>
+                <span style={{color:"#555"}}>Aguarde o Dono ou Admin te atribuir um grupo.</span>
+              </div>
+            ):(
+              <div style={{background:"#111",border:"1px solid #1e1e1e",borderRadius:12,padding:"12px 14px"}}>
+                <div style={{color:"#eee",fontWeight:700,fontSize:12,marginBottom:10}}>
+                  {myManagedGroup}
+                  <span style={{color:"#444",fontWeight:400,fontSize:10}}> — seu grupo</span>
+                </div>
+                <div style={{fontSize:9,color:"#555",marginBottom:5,letterSpacing:1}}>MEMBROS — clique para adicionar/remover</div>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                  {ALL_USERS.filter(u=>u!==user).map(u=>{
+                    const isMem=(members[myManagedGroup]||[]).includes(u);
+                    return (
+                      <button key={u} onClick={()=>{
+                        const cur=members[myManagedGroup]||[];
+                        const updated=cur.includes(u)?cur.filter(x=>x!==u):[...cur,u];
+                        set(ref(db,`members/${myManagedGroup}`),updated.length>0?updated:null);
+                      }} style={{padding:"6px 10px",borderRadius:8,fontSize:10,cursor:"pointer",fontFamily:"monospace",border:"none",background:isMem?USERS_DEF[u].color:"#1a1a1a",color:isMem?"#0d0d0d":"#555"}}>
+                        {u[0]} {u}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
         {adminTab==="pedidos"&&(
